@@ -19,6 +19,7 @@ import (
 func main() {
 	kubeconfig := ""
 	databaseLocation := ""
+	outputFormat := ""
 	cmd := &cli.Command{
 		Commands: []*cli.Command{
 			{
@@ -73,6 +74,14 @@ func main() {
 						Value:       "kubsto.db",
 						Usage:       "database location",
 						Destination: &databaseLocation,
+						Aliases:     []string{"d"},
+					},
+					&cli.StringFlag{
+						Name:        "output-format",
+						Value:       "text",
+						Usage:       "output format",
+						Destination: &outputFormat,
+						Aliases:     []string{"o"},
 					},
 				},
 				Action: func(ctx context.Context, cmd *cli.Command) error {
@@ -94,14 +103,7 @@ func main() {
 						return err
 					}
 
-					// marshal results to json
-					marshaledResults, err := json.Marshal(results)
-					if err != nil {
-						return err
-					}
-
-					fmt.Println(string(marshaledResults))
-					return nil
+					return printResults(results, outputFormat)
 				},
 			},
 		},
@@ -112,4 +114,29 @@ func main() {
 		os.Exit(1)
 	}
 
+}
+
+func printResults(results []map[string]string, outputFormat string) error {
+	switch outputFormat {
+	case "json":
+		// marshal results to json
+		marshaledResults, err := json.Marshal(results)
+		if err != nil {
+			return err
+		}
+
+		fmt.Println(string(marshaledResults))
+		return nil
+	case "text":
+		// print results as text
+		for _, result := range results {
+			for key, value := range result {
+				fmt.Printf("%s: %s\n", key, value)
+			}
+			fmt.Println("----------")
+		}
+		return nil
+	default:
+		return fmt.Errorf("unknown output format: %s", outputFormat)
+	}
 }
