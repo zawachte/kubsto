@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"log/slog"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -13,18 +14,17 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-kit/log"
 	"k8s.io/client-go/kubernetes"
 )
 
 type podLogsLoader struct {
-	logger log.Logger
+	logger *slog.Logger
 	duckdb *sql.DB
 	cs     kubernetes.Interface
 }
 
 type PodLogsLoaderParams struct {
-	Logger    log.Logger
+	Logger    *slog.Logger
 	Duckdb    *sql.DB
 	ClientSet kubernetes.Interface
 }
@@ -35,6 +35,10 @@ func NewPodLogsLoader(params PodLogsLoaderParams) (Loader, error) {
 		duckdb: params.Duckdb,
 		cs:     params.ClientSet,
 	}, nil
+}
+
+func (p *podLogsLoader) Name() string {
+	return "PodLogs"
 }
 
 func (p *podLogsLoader) Load(ctx context.Context) error {
@@ -64,7 +68,7 @@ func (p *podLogsLoader) Load(ctx context.Context) error {
 
 				podLogs, err := req.Stream(ctx)
 				if err != nil {
-					p.logger.Log("error streaming pod logs", "pod_name", pod.Name, "container_name", container.Name, "error", err)
+					p.logger.Info("error streaming pod logs", "pod_name", pod.Name, "container_name", container.Name, "error", err)
 					continue
 				}
 				defer podLogs.Close()
@@ -95,12 +99,12 @@ func (p *podLogsLoader) loadLogsToDuckDB(rawLogs *bytes.Buffer, podName, contain
 		logLineSplit := strings.Split(scanner.Text(), " ")
 		tim, err := time.Parse(time.RFC3339, logLineSplit[0])
 		if err != nil {
-			p.logger.Log("Skipping log due to invalid parse", "Error", err.Error())
+			p.logger.Info("Skipping log due to invalid parse", "Error", err.Error())
 			continue
 		}
 		_, err = p.duckdb.Exec(`INSERT INTO logs VALUES (?, ?, ?, ?, ?)`, tim, scanner.Text(), podName, containerName, namespace)
 		if err != nil {
-			p.logger.Log("Skipping log due to invalid parse", "Error", err.Error())
+			p.logger.Info("Skipping log due to invalid parse", "Error", err.Error())
 			continue
 		}
 	}

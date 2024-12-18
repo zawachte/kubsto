@@ -4,9 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log/slog"
 	"os"
-
-	"github.com/go-kit/log"
+	"path"
 
 	"github.com/runreveal/pql"
 	"k8s.io/client-go/kubernetes"
@@ -14,17 +14,18 @@ import (
 
 func NewQuerier(params QuerierParams) (Querier, error) {
 
-	databaseLocation := "kubsto.db"
+	databaseLocation := "data"
 	if params.DatabaseLocation != "" {
 		databaseLocation = params.DatabaseLocation
 	}
 
-	_, err := os.Stat(databaseLocation)
+	databaseFile := path.Join(databaseLocation, "kubsto.db")
+	_, err := os.Stat(databaseFile)
 	if os.IsNotExist(err) {
 		return nil, fmt.Errorf("database does not exist, please load it first")
 	}
 
-	db, err := sql.Open("duckdb", databaseLocation)
+	db, err := sql.Open("duckdb", databaseFile)
 	if err != nil {
 		return nil, err
 	}
@@ -39,13 +40,13 @@ type Querier interface {
 }
 
 type querier struct {
-	logger log.Logger
+	logger *slog.Logger
 	duckdb *sql.DB
 }
 
 type QuerierParams struct {
 	URI              string
-	Logger           log.Logger
+	Logger           *slog.Logger
 	ClientSet        kubernetes.Interface
 	DatabaseLocation string
 }
@@ -56,7 +57,7 @@ func (q *querier) Query(ctx context.Context, queryString string) ([]map[string]s
 		return nil, err
 	}
 
-	q.logger.Log("compiled query", "query", query)
+	q.logger.Debug("compiled query", "query", query)
 
 	// Execute the query
 	rows, err := q.duckdb.Query(query)

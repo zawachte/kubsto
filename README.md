@@ -25,6 +25,12 @@ If you don't:
 ./bin/kubsto query "logs | where namespace == 'kube-system' | project time, log | where contains(log, 'error')"
 ```
 
+### Query with duckdb
+
+```sh
+duckdb data/kubsto.db
+```
+
 ## Future work
 
 * github actions

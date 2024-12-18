@@ -5,8 +5,10 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
+	"path"
 
-	"github.com/go-kit/log"
+	"log/slog"
+
 	"github.com/zawachte/kubsto/pkg/loader"
 	"k8s.io/client-go/kubernetes"
 
@@ -19,29 +21,36 @@ type Runner interface {
 
 type runner struct {
 	cs     kubernetes.Interface
-	logger log.Logger
+	logger *slog.Logger
 	duckdb *sql.DB
 }
 
 type RunnerParams struct {
 	URI              string
-	Logger           log.Logger
+	Logger           *slog.Logger
 	ClientSet        kubernetes.Interface
 	DatabaseLocation string
 }
 
 func NewRunner(params RunnerParams) (Runner, error) {
-	databaseLocation := "kubsto.db"
+	databaseLocation := "data"
 	if params.DatabaseLocation != "" {
 		databaseLocation = params.DatabaseLocation
 	}
 
-	_, err := os.Stat(databaseLocation)
+	databaseFile := path.Join(databaseLocation, "kubsto.db")
+	_, err := os.Stat(databaseFile)
 	if err == nil {
 		return nil, fmt.Errorf("database already exists, please delete it first")
 	}
 
-	db, err := sql.Open("duckdb", databaseLocation)
+	// make the data directory if it doesn't exist
+	err = os.MkdirAll(databaseLocation, 0755)
+	if err != nil {
+		return nil, err
+	}
+
+	db, err := sql.Open("duckdb", databaseFile)
 	if err != nil {
 		return nil, err
 	}
@@ -53,6 +62,9 @@ func NewRunner(params RunnerParams) (Runner, error) {
 }
 
 func (r *runner) Run(ctx context.Context) error {
+
+	loaders := []loader.Loader{}
+
 	loaderInstance, err := loader.NewPodLogsLoader(loader.PodLogsLoaderParams{
 		Logger:    r.logger,
 		Duckdb:    r.duckdb,
@@ -62,5 +74,37 @@ func (r *runner) Run(ctx context.Context) error {
 		return err
 	}
 
-	return loaderInstance.Load(ctx)
+	loaders = append(loaders, loaderInstance)
+
+	loaderInstance, err = loader.NewEventsLoader(loader.EventsLoaderParams{
+		Logger:    r.logger,
+		Duckdb:    r.duckdb,
+		ClientSet: r.cs,
+	})
+	if err != nil {
+		return err
+	}
+
+	loaders = append(loaders, loaderInstance)
+
+	loaderInstance, err = loader.NewPodsLoader(loader.PodsLoaderParams{
+		Logger:    r.logger,
+		Duckdb:    r.duckdb,
+		ClientSet: r.cs,
+	})
+	if err != nil {
+		return err
+	}
+
+	loaders = append(loaders, loaderInstance)
+
+	for _, loaderInstance := range loaders {
+		r.logger.Info("loading data into duckdb", "loader", loaderInstance.Name())
+		err := loaderInstance.Load(ctx)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }

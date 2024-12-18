@@ -7,7 +7,7 @@ import (
 
 	"context"
 
-	"github.com/go-kit/log"
+	"log/slog"
 
 	_ "github.com/marcboeker/go-duckdb"
 	"github.com/urfave/cli/v3"
@@ -34,14 +34,14 @@ func main() {
 						Destination: &kubeconfig,
 					},
 					&cli.StringFlag{
-						Name:        "database-location",
-						Value:       "kubsto.db",
+						Name:        "data-dir",
+						Value:       "data",
 						Usage:       "database location",
 						Destination: &databaseLocation,
 					},
 				},
 				Action: func(ctx context.Context, cmd *cli.Command) error {
-					logger := log.NewLogfmtLogger(log.NewSyncWriter(os.Stderr))
+					logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
 					cs, err := kubeclient.CreateClientSet(kubeconfig)
 					if err != nil {
@@ -70,8 +70,8 @@ func main() {
 				Usage:   "query duckdb database",
 				Flags: []cli.Flag{
 					&cli.StringFlag{
-						Name:        "database-location",
-						Value:       "kubsto.db",
+						Name:        "data-dir",
+						Value:       "data",
 						Usage:       "database location",
 						Destination: &databaseLocation,
 						Aliases:     []string{"d"},
@@ -85,7 +85,8 @@ func main() {
 					},
 				},
 				Action: func(ctx context.Context, cmd *cli.Command) error {
-					logger := log.NewLogfmtLogger(log.NewSyncWriter(os.Stderr))
+					logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
+
 					if cmd.NArg() == 0 {
 						return fmt.Errorf("no query string provided")
 					}
