@@ -35,5 +35,3 @@ duckdb data/kubsto.db
 
 * github actions
 * Investigate kubectl plugin
-* kubernetes events table
-* kubernetes metadata tables (pod objects)ss
